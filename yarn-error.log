@@ -1,0 +1,71 @@
+Arguments: 
+  /Users/highlander/.nvm/versions/node/v20.1.0/bin/node /Users/highlander/.yarn/bin/yarn.js
+
+PATH: 
+  /Library/Frameworks/Python.framework/Versions/2.7/bin:/usr/local/opt/python@2/bin:/Users/highlander/.pyenv/shims:/Users/highlander/.pyenv/bin:/Users/highlander/.yarn/bin:/Users/highlander/.config/yarn/global/node_modules/.bin:/Users/highlander/.bun/bin:/Users/highlander/google-cloud-sdk/bin:/Users/highlander/Library/pnpm:/Users/highlander/.nvm/versions/node/v20.1.0/bin:/Library/Frameworks/Python.framework/Versions/2.7/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/usr/local/MacGPG2/bin:~/.dotnet/tools:/usr/local/go/bin:/Users/highlander/go/bin
+
+Yarn version: 
+  1.22.19
+
+Node version: 
+  20.1.0
+
+Platform: 
+  darwin arm64
+
+Trace: 
+  Error: ENOENT: no such file or directory, copyfile '/Users/highlander/Library/Caches/Yarn/v6/npm-follow-redirects-1.5.10-7b7a9f9aea2fdff36786a94ff643ed07f4ff5e2a-integrity/node_modules/follow-redirects/LICENSE' -> '/Users/highlander/WebstormProjects/pioneer-ai-v2/services/pioneer-bot/node_modules/@pioneer-platform/ccbot-coincap/node_modules/follow-redirects/LICENSE'
+
+npm manifest: 
+  {
+    "name": "pioneer-bot",
+    "version": "1.0.1",
+    "private": true,
+    "scripts": {
+      "npm": "npm i",
+      "start": "node lib/index",
+      "test": "npm run build && node lib/index",
+      "build": "tsc -p .",
+      "dev": "npm run build && npm run start",
+      "dev-bot": "npm run dev",
+      "prepublish": "npm run build",
+      "docker:build": "docker build -t pioneer/pioneer-bot:latest .",
+      "docker:tag": "docker tag pioneer/pioneer-bot:latest registry.digitalocean.com/pioneer/pioneer/pioneer-bot:latest",
+      "docker:push": "docker push registry.digitalocean.com/pioneer/pioneer/pioneer-bot:latest",
+      "docker:push:all": "npm run docker:build && npm run docker:tag && npm run docker:push"
+    },
+    "dependencies": {
+      "@pioneer-platform/accounting": "^6.2.2",
+      "@pioneer-platform/ccbot-coincap": "^8.1.16",
+      "@pioneer-platform/ccbot-easter-eggs": "^8.1.10",
+      "@pioneer-platform/ccbot-rivescript-brain": "^8.1.10",
+      "@pioneer-platform/coincap": "^8.3.1",
+      "@pioneer-platform/default-mongo": "latest",
+      "@pioneer-platform/default-redis": "latest",
+      "@pioneer-platform/loggerdog": "latest",
+      "@pioneer-platform/redis-queue": "^8.3.1",
+      "@types/uuid": "^9.0.8",
+      "asciichart": "^1.5.25",
+      "axios": "^1.6.8",
+      "chai": "^4.4.1",
+      "dotenv": "^8.6.0",
+      "node-cron": "^3.0.3",
+      "openai": "^3.3.0",
+      "sentence-tokenizer": "^1.0.1",
+      "uuid": "^9.0.1",
+      "wait-promise": "^0.4.1"
+    },
+    "devDependencies": {
+      "@types/express": "^4.17.21",
+      "@types/node": "^13.13.52",
+      "nodemon": "^2.0.22",
+      "ts-node": "^8.10.2",
+      "typescript": "^5.4.5"
+    }
+  }
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile
