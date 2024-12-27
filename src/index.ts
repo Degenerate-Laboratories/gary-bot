@@ -36,7 +36,7 @@ import { subscriber, publisher } from "@pioneer-platform/default-redis";
 //@ts-ignore
 import queue from "@pioneer-platform/redis-queue";
 //@ts-ignore
-import connection from "@pioneer-platform/default-mongo";
+//import connection from "@pioneer-platform/default-mongo";
 
 // Import the prompts
 import {
@@ -59,12 +59,12 @@ const TAG = ` | ${packageInfo.name} | `;
 // let wallet = SolanaLib.init({ mnemonic: seed })
 
 // Database setup
-const usersDB = connection.get("users");
-usersDB.createIndex({ id: 1 }, { unique: true });
-usersDB.createIndex({ username: 1 }, { unique: true });
+// const usersDB = connection.get("users");
+// usersDB.createIndex({ id: 1 }, { unique: true });
+// usersDB.createIndex({ username: 1 }, { unique: true });
 
-const conversations = connection.get("conversations");
-conversations.createIndex({ messageId: 1 }, { unique: true });
+// const conversations = connection.get("conversations");
+// conversations.createIndex({ messageId: 1 }, { unique: true });
 
 // Utility function to publish a message
 const pushMessage = async (message: string) => {
