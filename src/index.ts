@@ -207,25 +207,6 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
             publisher.publish("clubmoon-publish", JSON.stringify(payload));
         }
 
-        if (channel === "clubmoon-events" && payloadS.includes("joined the game")) {
-            //console.log(tag, "User joined the game:", payloadS);
-            const messages = [
-                SYSTEM_GARY_PROMPT,
-                SYSTEM_ONE_SENTENCE_PROMPT,
-                USER_JOINED_PROMPT(payloadS),
-            ];
-
-            const response = await performInference(messages);
-            const greeting = "this is Gary Gensler, Chairman of the SEC. " + response.content;
-
-            const payload = {
-                text: greeting,
-                voice: "echo",
-                speed: 0.75,
-            };
-            publisher.publish("clubmoon-publish", JSON.stringify(payload));
-        }
-
         if (channel === "clubmoon-raid") {
             console.log(tag, "clubmoon-raid:", payloadS);
             
