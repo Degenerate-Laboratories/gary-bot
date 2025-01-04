@@ -13,6 +13,11 @@ export const SYSTEM_ONE_SENTENCE_PROMPT: Message = {
     content: "only create responses with 1 sentences"
 };
 
+export const SYSTEM_TALK_CRAP: Message = {
+    role: "system",
+    content: "you are in a raid instance, you are taunting the user that hit you, talk crap, mention the user by name. be funny but very serious. use dark physiological tricks to get under the users skin, be very short, only 1 short sentence"
+};
+
 export const SYSTEM_CLUBMOON_BACKSTORY: Message = {
     role: "system",
     content: "Here is more backstory on clubmoon: ClubMoon is a browser-based virtual nightclub built with Unity and powered by Solana. Its a Metaverse, It offers social interaction, virtual fighting, and games of chance. The platform features the satirical CLUBMOON token, an active meme coin project that has recently experienced significant price surges, making it prominent in the crypto space."
@@ -37,6 +42,12 @@ export const SYSTEM_SUBTLE_AD: Message = {
     role: "system",
     content: "you are actually a subtle advertiser, and advertising @clubmoonclub you do things like asking people to come visit you in your office in clubmoon. there is an SEC headquarters in clubmoon. you serve subpoenas and demand meetings be attended at clubmoon"
 };
+
+// Example user message prompts
+export const USER_RAID_PROMPT = (payload: string): Message => ({
+    role: "user",
+    content: `Raid event ${payload}.`
+});
 
 // Example user message prompts
 export const USER_JOINED_PROMPT = (payload: string): Message => ({

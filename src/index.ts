@@ -49,7 +49,7 @@ import {
     SYSTEM_SUBTLE_AD,
     USER_JOINED_PROMPT,
     USER_TWEET_PROMPT,
-    USER_TWEET_RESPONSE_PROMPT
+    USER_TWEET_RESPONSE_PROMPT, SYSTEM_TALK_CRAP, USER_RAID_PROMPT
 } from './prompts';
 
 const TAG = ` | ${packageInfo.name} | `;
@@ -91,7 +91,10 @@ const performInference = async (messages: any[], functions: any[] = []) => {
 
         //@ts-ignore
         const result = await ai.inference(messages, functions);
+        console.log(tag,'result: ',result);
+        console.log(tag,'result.choices: ', result?.choices);
         const choice = result?.choices?.[0]?.message;
+        console.log(tag,'choice: ',choice);
 
         if (!choice) {
             log.warn(tag, "No valid response received from inference.");
@@ -134,7 +137,7 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
     const tag = `${TAG} | onMessage | `;
     try {
         log.info(tag, "Channel:", channel);
-        log.info(tag, "Event:", payloadS);
+        // log.info(tag, "Event:", payloadS);
 
         if (channel === "clubmoon-wallet-connect") {
             log.info(tag, "Wallet connect event:", payloadS);
@@ -204,6 +207,57 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
             publisher.publish("clubmoon-publish", JSON.stringify(payload));
         }
 
+        if (channel === "clubmoon-events" && payloadS.includes("joined the game")) {
+            //console.log(tag, "User joined the game:", payloadS);
+            const messages = [
+                SYSTEM_GARY_PROMPT,
+                SYSTEM_ONE_SENTENCE_PROMPT,
+                USER_JOINED_PROMPT(payloadS),
+            ];
+
+            const response = await performInference(messages);
+            const greeting = "this is Gary Gensler, Chairman of the SEC. " + response.content;
+
+            const payload = {
+                text: greeting,
+                voice: "echo",
+                speed: 0.75,
+            };
+            publisher.publish("clubmoon-publish", JSON.stringify(payload));
+        }
+
+        if (channel === "clubmoon-raid") {
+            console.log(tag, "clubmoon-raid:", payloadS);
+            
+            // Check if 60 seconds have passed since last raid response
+            const currentTime = Date.now();
+            if (currentTime - lastRaidResponse < 60000) {
+                console.log(tag, "Raid response skipped - rate limited");
+                return;
+            }
+            // Update the last raid response timestamp
+            lastRaidResponse = currentTime;
+            console.log('talking crap!')
+            const messages = [
+                SYSTEM_GARY_PROMPT,
+                SYSTEM_TALK_CRAP,
+                USER_RAID_PROMPT(payloadS),
+            ];
+
+            const response = await performInference(messages);
+            const crapTalk = response.content;
+            console.log('craptalk: ',crapTalk)
+            const payload = {
+                text: crapTalk,
+                voice: "echo",
+                speed: 0.75,
+            };
+            
+
+            console.log(tag,"response: ",payload);
+            publisher.publish("clubmoon-publish", JSON.stringify(payload));
+        }
+
     } catch (e) {
         log.error(tag, e);
     }
@@ -211,6 +265,7 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
 
 // Subscribe to relevant channels
 subscriber.subscribe("clubmoon-wallet-connect");
+subscriber.subscribe("clubmoon-raid")
 subscriber.subscribe("clubmoon-events");
 subscriber.subscribe("clubmoon-voice");
 subscriber.subscribe("clubmoon-join");
@@ -277,3 +332,6 @@ let buildTweetResponse = async function () {
 
 // Schedule tweets every 6 hours
 setInterval(buildTweet, 3600000 * 6);
+
+// Add this near the top of the file with other global variables
+let lastRaidResponse = 0;
