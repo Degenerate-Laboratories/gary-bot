@@ -12,6 +12,8 @@ if (!process.env['TWITTER_ACCESS_TOKEN']) throw new Error('TWITTER_ACCESS_TOKEN 
 if (!process.env['TWITTER_ACCESS_SECRET']) throw new Error('TWITTER_ACCESS_SECRET missing');
 if (!process.env['TWITTER_BEARER_TOKEN']) throw new Error('TWITTER_BEARER_TOKEN missing');
 
+import axios from 'axios';
+
 let params = {
     appKey: process.env['TWITTER_API_KEY'],
     appSecret: process.env['TWITTER_API_SECRET'],
@@ -25,7 +27,16 @@ import { TwitterApi } from "twitter-api-v2";
 // Initialize Twitter API client
 const client = new TwitterApi(params);
 
-import ai from "@pioneer-platform/pioneer-openai/lib";
+import OpenAI from 'openai';
+
+if(!process.env['VENICE_API_KEY']) throw Error("Missing VENICE_API_KEY")
+
+
+const openai = new OpenAI({
+    apiKey: process.env['VENICE_API_KEY'], // This is the default and can be omitted
+    baseURL: "https://api.venice.ai/api/v1",
+});
+
 import dotenv from "dotenv";
 //@ts-ignore
 import packageInfo from "../package.json";
@@ -48,8 +59,9 @@ import {
     SYSTEM_NO_SEC_HASHTAG,
     SYSTEM_SUBTLE_AD,
     USER_JOINED_PROMPT,
+    SYSTEM_ROAST_WALLET,
     USER_TWEET_PROMPT,
-    USER_TWEET_RESPONSE_PROMPT, SYSTEM_TALK_CRAP, USER_RAID_PROMPT
+    USER_TWEET_RESPONSE_PROMPT, SYSTEM_TALK_CRAP, USER_RAID_PROMPT,
 } from './prompts';
 
 const TAG = ` | ${packageInfo.name} | `;
@@ -65,6 +77,68 @@ const TAG = ` | ${packageInfo.name} | `;
 
 // const conversations = connection.get("conversations");
 // conversations.createIndex({ messageId: 1 }, { unique: true });
+
+let MODELS:any = [
+    'dolphin-2.9.2-qwen2-72b'
+]
+
+// Add these near the top with other global variables
+let messageQueue: any[] = [];
+let isProcessingQueue = false;
+let lastMessageTime = 0;
+const BASE_COOLDOWN = 6000; // Base cooldown of 6 seconds
+const CHAR_DELAY = 50; // 50ms per character
+
+// Function to calculate message delay based on content length
+const calculateMessageDelay = (message: any) => {
+    const messageLength = message.text.length;
+    // Base cooldown + character-based delay
+    const delay = BASE_COOLDOWN + (messageLength * CHAR_DELAY);
+    // Cap the maximum delay at 15 seconds
+    return Math.min(delay, 15000);
+};
+
+// Function to publish message with queue handling
+const publishQueuedMessage = async (message: any) => {
+    const tag = `${TAG} | publishQueuedMessage | `;
+    try {
+        messageQueue.push(message);
+        if (!isProcessingQueue) {
+            await processMessageQueue();
+        }
+    } catch (e) {
+        log.error(tag, "Error publishing queued message:", e);
+    }
+};
+
+// Function to process the message queue
+const processMessageQueue = async () => {
+    const tag = `${TAG} | processMessageQueue | `;
+    if (isProcessingQueue || messageQueue.length === 0) return;
+
+    isProcessingQueue = true;
+    try {
+        while (messageQueue.length > 0) {
+            const currentTime = Date.now();
+            const timeSinceLastMessage = currentTime - lastMessageTime;
+            const message = messageQueue[0]; // Peek at the next message
+            const requiredDelay = calculateMessageDelay(message);
+            
+            if (timeSinceLastMessage < requiredDelay) {
+                await new Promise(resolve => setTimeout(resolve, requiredDelay - timeSinceLastMessage));
+            }
+
+            const messageToSend = messageQueue.shift();
+            log.info(tag, `Publishing message with delay: ${requiredDelay}ms, length: ${messageToSend.text.length} chars`);
+            await publisher.publish("clubmoon-publish", JSON.stringify(messageToSend));
+            lastMessageTime = Date.now();
+        }
+    } catch (e) {
+        log.error(tag, "Error processing message queue:", e);
+    } finally {
+        isProcessingQueue = false;
+    }
+};
 
 // Utility function to publish a message
 const pushMessage = async (message: string) => {
@@ -90,8 +164,21 @@ const performInference = async (messages: any[], functions: any[] = []) => {
         log.info(tag, "Messages:", messages);
 
         //@ts-ignore
-        const result = await ai.inference(messages, functions);
-        console.log(tag,'result: ',result);
+        // const result = await ai.inference(messages, functions);
+
+        let params:any = {
+            messages,
+            model: MODELS[0],
+        }
+        if(functions.length > 0){
+            params.functions = functions
+        }
+
+        let result = await openai.chat.completions.create(params);
+        console.log(tag,'result: **** ',result);
+        // @ts-ignore
+        result = JSON.parse(result)
+        console.log(tag,'result: ',typeof(result));
         console.log(tag,'result.choices: ', result?.choices);
         const choice = result?.choices?.[0]?.message;
         console.log(tag,'choice: ',choice);
@@ -109,10 +196,7 @@ const performInference = async (messages: any[], functions: any[] = []) => {
             if (EXAMPLE_WALLET[name]) {
                 //@ts-ignore
                 const functionResponse = await EXAMPLE_WALLET[name](...Object.values(functionArgs));
-                messages.push({
-                    role: "assistant",
-                    content: `The response for ${name} is ${functionResponse} with arguments ${JSON.stringify(functionArgs)}`,
-                });
+                messages.push();
                 log.info(tag, "Messages after function call:", messages);
 
                 // Final response after function handling
@@ -129,6 +213,19 @@ const performInference = async (messages: any[], functions: any[] = []) => {
     } catch (e) {
         log.error(tag, "Error during inference:", e);
         return { content: "Error during inference.", functionCall: null };
+    }
+};
+
+// Function to fetch Solana account information
+const getSolanaAccountInfo = async (pubkey: string) => {
+    const tag = `${TAG} | getSolanaAccountInfo | `;
+    try {
+        const response = await axios.get(`https://api.solana.shapeshift.com/api/v1/account/${pubkey}`);
+        log.info(tag, "Solana account info:", response.data);
+        return response.data;
+    } catch (error) {
+        log.error(tag, "Error fetching Solana account info:", error);
+        throw error;
     }
 };
 
@@ -179,14 +276,46 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
                 const response = await performInference(messages);
                 const greeting = response.content;
                 console.log('greeting: ', greeting)
-                const payload = {
+                await publishQueuedMessage({
                     text: greeting,
                     voice: "echo",
                     speed: 0.75,
-                };
-                publisher.publish("clubmoon-publish", JSON.stringify(payload));
+                });
             }
         }
+
+        if (channel === "clubmoon-wallet-connect") {
+            const tag = `${TAG} | clubmoon-wallet-connect | `;
+            try {
+                console.log(tag, "clubmoon-wallet-connect:", payloadS);
+                let payload = JSON.parse(payloadS);
+                console.log(tag, "payload.data.message:", payload.data.message);
+                const accountInfo = await getSolanaAccountInfo(payload.data.message);
+                log.info(tag, "Account info received:", accountInfo);
+
+                const messages = [
+                    SYSTEM_GARY_PROMPT,
+                    SYSTEM_ONE_SENTENCE_PROMPT,
+                    SYSTEM_ROAST_WALLET,
+                    {
+                        role: "user",
+                        content: "my wallet: "+JSON.stringify(accountInfo),
+                    },
+                ];
+
+                const response = await performInference(messages);
+                const greeting = response.content;
+
+                await publishQueuedMessage({
+                    text: greeting,
+                    voice: "echo",
+                    speed: 0.75,
+                });
+            } catch (error) {
+                log.error(tag, "Error in clubmoon-nft-connect handler:", error);
+            }
+        }
+
 
         if (channel === "clubmoon-events" && payloadS.includes("joined the game")) {
             console.log(tag, "User joined the game:", payloadS);
@@ -199,12 +328,18 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
             const response = await performInference(messages);
             const greeting = "this is Gary Gensler, Chairman of the SEC. " + response.content;
 
-            const payload = {
+            await publishQueuedMessage({
                 text: greeting,
                 voice: "echo",
                 speed: 0.75,
-            };
-            publisher.publish("clubmoon-publish", JSON.stringify(payload));
+            });
+        }
+
+        if(channel === "clubmoon-events"){
+            //
+            console.log(tag, "clubmoon-events:", payloadS);
+            let payload = JSON.parse(payloadS);
+
         }
 
         if (channel === "clubmoon-raid") {
@@ -228,15 +363,12 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
             const response = await performInference(messages);
             const crapTalk = response.content;
             console.log('craptalk: ',crapTalk)
-            const payload = {
+            
+            await publishQueuedMessage({
                 text: crapTalk,
                 voice: "echo",
                 speed: 0.75,
-            };
-            
-
-            console.log(tag,"response: ",payload);
-            publisher.publish("clubmoon-publish", JSON.stringify(payload));
+            });
         }
 
     } catch (e) {
@@ -245,6 +377,7 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
 });
 
 // Subscribe to relevant channels
+subscriber.subscribe("clubmoon-nft-connect");
 subscriber.subscribe("clubmoon-wallet-connect");
 subscriber.subscribe("clubmoon-raid")
 subscriber.subscribe("clubmoon-events");

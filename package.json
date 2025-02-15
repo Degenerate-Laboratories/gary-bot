@@ -1,7 +1,10 @@
 {
-  "name": "gary-bot",
-  "version": "1.0.1",
-  "private": true,
+  "name": "@bithighlander/gary-bot",
+  "version": "1.0.6",
+  "description": "Gary Gensler AI Bot - A fun and interactive SEC chairman bot",
+  "bin": {
+    "gary-bot": "./bin/cli.js"
+  },
   "scripts": {
     "npm": "npm i",
     "start": "node lib/index",
@@ -15,6 +18,16 @@
     "docker:push": "docker push registry.digitalocean.com/pioneer/pioneer/gary-bot:latest",
     "docker:push:all": "npm run docker:build && npm run docker:tag && npm run docker:push"
   },
+  "keywords": [
+    "gary",
+    "gensler",
+    "bot",
+    "ai",
+    "sec",
+    "twitter"
+  ],
+  "author": "BitHighlander",
+  "license": "MIT",
   "dependencies": {
     "@pioneer-platform/accounting": "^6.2.2",
     "@pioneer-platform/ccbot-coincap": "^8.1.16",
@@ -32,7 +45,7 @@
     "chai": "^4.4.1",
     "dotenv": "^8.6.0",
     "node-cron": "^3.0.3",
-    "openai": "^3.3.0",
+    "openai": "^4.81.0",
     "sentence-tokenizer": "^1.0.1",
     "twitter-api-v2": "^1.18.2",
     "uuid": "^9.0.1",
