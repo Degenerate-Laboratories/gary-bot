@@ -53,6 +53,8 @@ import queue from "@pioneer-platform/redis-queue";
 import {
     SYSTEM_GARY_PROMPT,
     SYSTEM_ONE_SENTENCE_PROMPT,
+    SYSTEM_ROAST_PLAYER,
+    SYSTEM_ROAST_PLAYER_ATTACKING,
     SYSTEM_CLUBMOON_BACKSTORY,
     SYSTEM_ENEMIES_INFO,
     SYSTEM_KNOWN_HANDLES,
@@ -62,6 +64,7 @@ import {
     SYSTEM_ROAST_WALLET,
     USER_TWEET_PROMPT,
     USER_TWEET_RESPONSE_PROMPT, SYSTEM_TALK_CRAP, USER_RAID_PROMPT,
+    SYSTEM_TAUNT_DEAD,
 } from './prompts';
 
 const TAG = ` | ${packageInfo.name} | `;
@@ -88,12 +91,23 @@ let isProcessingQueue = false;
 let lastMessageTime = 0;
 const BASE_COOLDOWN = 6000; // Base cooldown of 6 seconds
 const CHAR_DELAY = 50; // 50ms per character
+const TAUNT_COOLDOWN = 2000; // Faster cooldown for taunts
+
+// Track players that have been killed and taunted
+let killedPlayers = new Set();
+
+// Add rate limiting for death taunts
+let lastDeathTaunt = 0;
+const DEATH_TAUNT_COOLDOWN = 5000; // 5 seconds between death taunts
+let lastDeathVictim = ""; // Track last victim to prevent duplicate taunts
 
 // Function to calculate message delay based on content length
 const calculateMessageDelay = (message: any) => {
     const messageLength = message.text.length;
+    // Use shorter cooldown for death taunts
+    const baseCooldown = message.isTaunt ? TAUNT_COOLDOWN : BASE_COOLDOWN;
     // Base cooldown + character-based delay
-    const delay = BASE_COOLDOWN + (messageLength * CHAR_DELAY);
+    const delay = baseCooldown + (messageLength * CHAR_DELAY);
     // Cap the maximum delay at 15 seconds
     return Math.min(delay, 15000);
 };
@@ -156,6 +170,12 @@ const EXAMPLE_WALLET = {
 };
 
 let ALL_USERS:any = []
+
+let PLAYERS_TAUNTED:any = []
+let PLAYERS_TAUNTED_DAMNAGE_DEALT:any = []
+let GARY_DEATH_LEVEL_1 = false
+let GARY_DEATH_LEVEL_2 = false
+let GARY_DEATH_LEVEL_FINAL = false
 
 // Generic inference function
 const performInference = async (messages: any[], functions: any[] = []) => {
@@ -336,10 +356,143 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
         }
 
         if(channel === "clubmoon-events"){
-            //
-            console.log(tag, "clubmoon-events:", payloadS);
-            let payload = JSON.parse(payloadS);
+            try {
+                // console.log(tag, "clubmoon-events:", payloadS);
+                let payload = JSON.parse(payloadS);
+                
+                // Validate payload structure before processing
+                if (!payload || !payload.event) {
+                    log.info(tag, "Invalid payload structure, missing event");
+                    return;
+                }
 
+                // Only extract user info if the payload has the required structure
+                if (payload.victimUser && payload.attackerUser) {
+                    const victim = payload.victimUser.name;
+                    const attacker = payload.attackerUser.name;
+                    const victimId = payload.victimUser.id;
+                    const victimHealth = payload.victimUser.health;
+
+
+
+                    if(payload.event === "DAMNAGE" && victim === 'Gary Gelsner'){
+                        //payload
+                        console.log(tag, "Gary took damage from:", attacker);
+                        console.log(tag, "Gary victimHealth:", victimHealth);
+                        if(victimHealth  < 2000){
+                            console.log(tag, "Gary took damage from:", attacker);
+                            if(!GARY_DEATH_LEVEL_1){
+                                GARY_DEATH_LEVEL_1 = true
+                                const messages = [
+                                    SYSTEM_GARY_PROMPT,
+                                    SYSTEM_ONE_SENTENCE_PROMPT,
+                                    {
+                                        role: "system",
+                                        content:  "You are getting hurt level: "+victimHealth+" tell them to stop, you are a little worried",
+                                    },
+                                ];
+
+                                const response = await performInference(messages);
+                                const message = response.content;
+                                console.log('message: ', message);
+                                await publishQueuedMessage({
+                                    text: message,
+                                    voice: "echo",
+                                    speed: 0.75,
+                                });
+                            }
+
+                            if(victimHealth  < 500) {
+                                if(!GARY_DEATH_LEVEL_2) {
+                                    GARY_DEATH_LEVEL_2 = true
+                                    const messages = [
+                                        SYSTEM_GARY_PROMPT,
+                                        SYSTEM_ONE_SENTENCE_PROMPT,
+                                        {
+                                            role: "system",
+                                            content:  "You are getting hurt level: "+victimHealth+" tell them to stop, you are a very worried",
+                                        },
+                                    ];
+
+                                    const response = await performInference(messages);
+                                    const message = response.content;
+                                    console.log('message: ', message);
+                                    await publishQueuedMessage({
+                                        text: message,
+                                        voice: "echo",
+                                        speed: 0.75,
+                                    });
+                                }
+                            }
+                        }
+
+                        //
+                        if(PLAYERS_TAUNTED_DAMNAGE_DEALT.indexOf(attacker) <= -1){
+                            PLAYERS_TAUNTED_DAMNAGE_DEALT.push(attacker);
+                            console.log(tag, "player did damage:", attacker);
+                            const messages = [
+                                SYSTEM_GARY_PROMPT,
+                                SYSTEM_ONE_SENTENCE_PROMPT,
+                                SYSTEM_ROAST_PLAYER_ATTACKING,
+                                {
+                                    role: "user",
+                                    content:  "player attacked: " + attacker,
+                                },
+                            ];
+
+                            const response = await performInference(messages);
+                            const message = response.content;
+                            console.log('message: ', message);
+                            await publishQueuedMessage({
+                                text: message,
+                                voice: "echo",
+                                speed: 0.75,
+                            });
+                        }
+
+
+
+                    }
+
+                    // Check for DEAD events
+                    if (payload.event === "DEAD") {
+                        console.log(tag, "player died victim:", victim);
+
+                        if(PLAYERS_TAUNTED.indexOf(victim) <= -1){
+                            console.log(tag, "Taunting Victim:", victim);
+                            PLAYERS_TAUNTED.push(victim);
+
+                            const messages = [
+                                SYSTEM_GARY_PROMPT,
+                                SYSTEM_ONE_SENTENCE_PROMPT,
+                                SYSTEM_ROAST_PLAYER,
+                                {
+                                    role: "user",
+                                    content:  "player died player name:"+ victim,
+                                },
+                            ];
+
+                            const response = await performInference(messages);
+                            const message = response.content;
+                            console.log('message: ', message);
+                            await publishQueuedMessage({
+                                text: message,
+                                voice: "echo",
+                                speed: 0.75,
+                            });
+                        }
+                    }
+                } else {
+                    log.info(tag, "Skipping event - missing user information in payload");
+                }
+            } catch (error) {
+                log.error(tag, "Error processing clubmoon-events:", error);
+                if (error instanceof SyntaxError) {
+                    log.error(tag, "Invalid JSON payload");
+                }
+                // Log the actual payload that caused the error
+                log.error(tag, "Problematic payload:", payloadS);
+            }
         }
 
         if (channel === "clubmoon-raid") {
