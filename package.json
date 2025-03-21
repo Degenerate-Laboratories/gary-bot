@@ -1,6 +1,6 @@
 {
   "name": "@bithighlander/gary-bot",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Gary Gensler AI Bot - A fun and interactive SEC chairman bot",
   "bin": {
     "gary-bot": "./bin/cli.js"

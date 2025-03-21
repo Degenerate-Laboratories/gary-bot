@@ -23,19 +23,36 @@ let params = {
 }
 console.log('params:', params);
 
-import { TwitterApi } from "twitter-api-v2";
+// import { TwitterApi } from "twitter-api-v2";
 // Initialize Twitter API client
-const client = new TwitterApi(params);
+// const client = new TwitterApi(params);
 
-import OpenAI from 'openai';
+// import OpenAI from 'openai';
 
-if(!process.env['VENICE_API_KEY']) throw Error("Missing VENICE_API_KEY")
+if(!process.env['OPENAI_API_KEY']) throw Error("Missing OPENAI_API_KEY")
 
+// Direct OpenAI API access using axios
+const callOpenAI = async (params: any) => {
+    try {
+        const response = await axios.post('https://api.openai.com/v1/chat/completions', params, {
+            headers: {
+                'Authorization': `Bearer ${process.env['OPENAI_API_KEY']}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error calling OpenAI API:', error);
+        throw error;
+    }
+};
 
-const openai = new OpenAI({
-    apiKey: process.env['VENICE_API_KEY'], // This is the default and can be omitted
-    baseURL: "https://api.venice.ai/api/v1",
-});
+// For OpenAI SDK v3.3.0
+// const { Configuration, OpenAIApi } = require('openai');
+// const configuration = new Configuration({
+//     apiKey: process.env['OPENAI_API_KEY']
+// });
+// const openaiClient = new OpenAIApi(configuration);
 
 import dotenv from "dotenv";
 //@ts-ignore
@@ -82,7 +99,7 @@ const TAG = ` | ${packageInfo.name} | `;
 // conversations.createIndex({ messageId: 1 }, { unique: true });
 
 let MODELS:any = [
-    'dolphin-2.9.2-qwen2-72b'
+    'gpt-3.5-turbo'
 ]
 
 // Add these near the top with other global variables
@@ -178,27 +195,25 @@ let GARY_DEATH_LEVEL_2 = false
 let GARY_DEATH_LEVEL_FINAL = false
 
 // Generic inference function
-const performInference = async (messages: any[], functions: any[] = []) => {
+const performInference = async (messages: any[], functions: any[] = []): Promise<{ content: string, functionCall: any }> => {
     const tag = `${TAG} | performInference | `;
     try {
         log.info(tag, "Messages:", messages);
 
-        //@ts-ignore
-        // const result = await ai.inference(messages, functions);
-
         let params:any = {
             messages,
             model: MODELS[0],
+            max_tokens: 256
         }
         if(functions.length > 0){
             params.functions = functions
         }
 
-        let result = await openai.chat.completions.create(params);
+        // Use the direct axios approach
+        let result = await callOpenAI(params);
         console.log(tag,'result: **** ',result);
-        // @ts-ignore
-        result = JSON.parse(result)
-        console.log(tag,'result: ',typeof(result));
+        // result is already an object, no need to parse
+        console.log(tag,'result: ', typeof(result));
         console.log(tag,'result.choices: ', result?.choices);
         const choice = result?.choices?.[0]?.message;
         console.log(tag,'choice: ',choice);
@@ -221,9 +236,9 @@ const performInference = async (messages: any[], functions: any[] = []) => {
 
                 // Final response after function handling
                 //@ts-ignore
-                const finalResponse = await ai.inference(messages);
+                const finalResponse = await performInference(messages);
                 return {
-                    content: finalResponse?.choices?.[0]?.message?.content || "Response not available.",
+                    content: finalResponse?.content || "Response not available.",
                     functionCall: null,
                 };
             }
@@ -232,6 +247,7 @@ const performInference = async (messages: any[], functions: any[] = []) => {
         return { content: choice.content, functionCall };
     } catch (e) {
         log.error(tag, "Error during inference:", e);
+        log.error(tag, "Error details:", JSON.stringify(e, Object.getOwnPropertyNames(e)));
         return { content: "Error during inference.", functionCall: null };
     }
 };
@@ -358,6 +374,12 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
         if(channel === "clubmoon-events"){
             try {
                 // console.log(tag, "clubmoon-events:", payloadS);
+                // Check if the payload is valid JSON
+                if (typeof payloadS !== 'string' || !payloadS.trim().startsWith('{')) {
+                    log.error(tag, "Invalid JSON format:", payloadS);
+                    return;
+                }
+                
                 let payload = JSON.parse(payloadS);
                 
                 // Validate payload structure before processing
@@ -375,84 +397,84 @@ subscriber.on("message", async (channel: string, payloadS: string) => {
 
 
 
-                    if(payload.event === "DAMNAGE" && victim === 'Gary Gelsner'){
-                        //payload
-                        console.log(tag, "Gary took damage from:", attacker);
-                        console.log(tag, "Gary victimHealth:", victimHealth);
-                        if(victimHealth  < 2000){
-                            console.log(tag, "Gary took damage from:", attacker);
-                            if(!GARY_DEATH_LEVEL_1){
-                                GARY_DEATH_LEVEL_1 = true
-                                const messages = [
-                                    SYSTEM_GARY_PROMPT,
-                                    SYSTEM_ONE_SENTENCE_PROMPT,
-                                    {
-                                        role: "system",
-                                        content:  "You are getting hurt level: "+victimHealth+" tell them to stop, you are a little worried",
-                                    },
-                                ];
-
-                                const response = await performInference(messages);
-                                const message = response.content;
-                                console.log('message: ', message);
-                                await publishQueuedMessage({
-                                    text: message,
-                                    voice: "echo",
-                                    speed: 0.75,
-                                });
-                            }
-
-                            if(victimHealth  < 500) {
-                                if(!GARY_DEATH_LEVEL_2) {
-                                    GARY_DEATH_LEVEL_2 = true
-                                    const messages = [
-                                        SYSTEM_GARY_PROMPT,
-                                        SYSTEM_ONE_SENTENCE_PROMPT,
-                                        {
-                                            role: "system",
-                                            content:  "You are getting hurt level: "+victimHealth+" tell them to stop, you are a very worried",
-                                        },
-                                    ];
-
-                                    const response = await performInference(messages);
-                                    const message = response.content;
-                                    console.log('message: ', message);
-                                    await publishQueuedMessage({
-                                        text: message,
-                                        voice: "echo",
-                                        speed: 0.75,
-                                    });
-                                }
-                            }
-                        }
-
-                        //
-                        if(PLAYERS_TAUNTED_DAMNAGE_DEALT.indexOf(attacker) <= -1){
-                            PLAYERS_TAUNTED_DAMNAGE_DEALT.push(attacker);
-                            console.log(tag, "player did damage:", attacker);
-                            const messages = [
-                                SYSTEM_GARY_PROMPT,
-                                SYSTEM_ONE_SENTENCE_PROMPT,
-                                SYSTEM_ROAST_PLAYER_ATTACKING,
-                                {
-                                    role: "user",
-                                    content:  "player attacked: " + attacker,
-                                },
-                            ];
-
-                            const response = await performInference(messages);
-                            const message = response.content;
-                            console.log('message: ', message);
-                            await publishQueuedMessage({
-                                text: message,
-                                voice: "echo",
-                                speed: 0.75,
-                            });
-                        }
-
-
-
-                    }
+                    // if(payload.event === "DAMNAGE" && victim === 'Gary Gelsner'){
+                    //     //payload
+                    //     console.log(tag, "Gary took damage from:", attacker);
+                    //     console.log(tag, "Gary victimHealth:", victimHealth);
+                    //     if(victimHealth  < 2000){
+                    //         console.log(tag, "Gary took damage from:", attacker);
+                    //         if(!GARY_DEATH_LEVEL_1){
+                    //             GARY_DEATH_LEVEL_1 = true
+                    //             const messages = [
+                    //                 SYSTEM_GARY_PROMPT,
+                    //                 SYSTEM_ONE_SENTENCE_PROMPT,
+                    //                 {
+                    //                     role: "system",
+                    //                     content:  "You are getting hurt level: "+victimHealth+" tell them to stop, you are a little worried",
+                    //                 },
+                    //             ];
+                    //
+                    //             const response = await performInference(messages);
+                    //             const message = response.content;
+                    //             console.log('message: ', message);
+                    //             await publishQueuedMessage({
+                    //                 text: message,
+                    //                 voice: "echo",
+                    //                 speed: 0.75,
+                    //             });
+                    //         }
+                    //
+                    //         if(victimHealth  < 500) {
+                    //             if(!GARY_DEATH_LEVEL_2) {
+                    //                 GARY_DEATH_LEVEL_2 = true
+                    //                 const messages = [
+                    //                     SYSTEM_GARY_PROMPT,
+                    //                     SYSTEM_ONE_SENTENCE_PROMPT,
+                    //                     {
+                    //                         role: "system",
+                    //                         content:  "You are getting hurt level: "+victimHealth+" tell them to stop, you are a very worried",
+                    //                     },
+                    //                 ];
+                    //
+                    //                 const response = await performInference(messages);
+                    //                 const message = response.content;
+                    //                 console.log('message: ', message);
+                    //                 await publishQueuedMessage({
+                    //                     text: message,
+                    //                     voice: "echo",
+                    //                     speed: 0.75,
+                    //                 });
+                    //             }
+                    //         }
+                    //     }
+                    //
+                    //     //
+                    //     if(PLAYERS_TAUNTED_DAMNAGE_DEALT.indexOf(attacker) <= -1){
+                    //         PLAYERS_TAUNTED_DAMNAGE_DEALT.push(attacker);
+                    //         console.log(tag, "player did damage:", attacker);
+                    //         const messages = [
+                    //             SYSTEM_GARY_PROMPT,
+                    //             SYSTEM_ONE_SENTENCE_PROMPT,
+                    //             SYSTEM_ROAST_PLAYER_ATTACKING,
+                    //             {
+                    //                 role: "user",
+                    //                 content:  "player attacked: " + attacker,
+                    //             },
+                    //         ];
+                    //
+                    //         const response = await performInference(messages);
+                    //         const message = response.content;
+                    //         console.log('message: ', message);
+                    //         await publishQueuedMessage({
+                    //             text: message,
+                    //             voice: "echo",
+                    //             speed: 0.75,
+                    //         });
+                    //     }
+                    //
+                    //
+                    //
+                    // }
 
                     // Check for DEAD events
                     if (payload.event === "DEAD") {
@@ -542,17 +564,18 @@ subscriber.subscribe("clubmoon-attack");
 subscriber.subscribe("clubmoon-messages");
 subscriber.subscribe("clubmoon-gary-join");
 
-const rwClient = client.readWrite;
+// Comment out Twitter client section
+// const rwClient = client.readWrite;
 
-// Function to tweet with text content only
-const textTweet = async (tweetContent: any) => {
-    try {
-        await rwClient.v2.tweet(tweetContent);
-        console.log("Text tweet sent successfully");
-    } catch (error) {
-        console.error("Error sending text tweet:", error);
-    }
-};
+// // Function to tweet with text content only
+// const textTweet = async (tweetContent: any) => {
+//     try {
+//         await rwClient.v2.tweet(tweetContent);
+//         console.log("Text tweet sent successfully");
+//     } catch (error) {
+//         console.error("Error sending text tweet:", error);
+//     }
+// };
 
 let buildTweet = async function () {
     let tag = " | buildTweet | "
@@ -570,8 +593,8 @@ let buildTweet = async function () {
         const response = await performInference(messages);
         const greeting = response.content;
         console.log(tag, "greeting: ", greeting)
-        textTweet(greeting)
-
+        // Commented out as Twitter is disabled
+        // textTweet(greeting)
     } catch (e) {
         console.error(e)
     }
@@ -590,15 +613,13 @@ let buildTweetResponse = async function () {
         const response = await performInference(messages);
         const greeting = response.content;
         console.log(tag, "greeting: ", greeting)
-        textTweet(greeting)
-
+        // Commented out as Twitter is disabled
+        // textTweet(greeting)
     } catch (e) {
         console.error(e)
     }
 }
 
-// Schedule tweets every 6 hours
-setInterval(buildTweet, 3600000 * 6);
 
 // Add this near the top of the file with other global variables
 let lastRaidResponse = 0;
